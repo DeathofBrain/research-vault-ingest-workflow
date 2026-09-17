@@ -1,0 +1,8 @@
+{
+  "unverifiable_pdf_pages": {
+    "UMF6U7QM": [2, 7]
+  },
+  "known_validate_failures": {
+    "UMF6U7QM": ["note.quotes.verified_in_pdf"]
+  }
+}

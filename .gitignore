@@ -1,0 +1,21 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.log
+
+# Planning-with-files working memory is local, not product content.
+task_plan.md
+findings.md
+progress.md
+
+# Never publish research data or secrets from accidental local staging.
+*.pdf
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.zotero-ft-cache
+secrets.*
+.env.*
+!.env.example

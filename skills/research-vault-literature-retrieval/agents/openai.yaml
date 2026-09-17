@@ -1,0 +1,4 @@
+interface:
+  display_name: "ResearchVault 检索"
+  short_description: "先索引、后笔记、必要时核验全文"
+  default_prompt: "使用 $research-vault-literature-retrieval，只基于当前 ResearchVault 的已有证据回答。"
