@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
 import py_compile
@@ -66,6 +67,7 @@ class RepositoryTests(unittest.TestCase):
                 "config/audit_exceptions.json",
             ]:
                 self.assertTrue((vault / rel).exists(), rel)
+            self.assertFalse(list(vault.rglob("*.py[co]")))
             second = subprocess.run(
                 [sys.executable, str(ROOT / "scripts/bootstrap.py"), "--vault", str(vault)],
                 cwd=ROOT,
@@ -85,6 +87,28 @@ class RepositoryTests(unittest.TestCase):
         for command in commands:
             result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_validator_resolves_vault_links_cross_platform(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            note = vault / "02vault" / "论文库" / "Example.md"
+            note.parent.mkdir(parents=True)
+            note.write_text("# Example\n", encoding="utf-8")
+            old_root = os.environ.get("RESEARCH_VAULT_ROOT")
+            os.environ["RESEARCH_VAULT_ROOT"] = str(vault)
+            try:
+                script = ROOT / "vault-kit" / "tools" / "validate_ingest.py"
+                spec = importlib.util.spec_from_file_location("portable_validator", script)
+                module = importlib.util.module_from_spec(spec)
+                assert spec.loader is not None
+                spec.loader.exec_module(module)
+                self.assertEqual(Path(module.resolve_link("论文库/Example")), note)
+                self.assertEqual(module.vault_rel(note), "02vault/论文库/Example.md")
+            finally:
+                if old_root is None:
+                    os.environ.pop("RESEARCH_VAULT_ROOT", None)
+                else:
+                    os.environ["RESEARCH_VAULT_ROOT"] = old_root
 
 
 if __name__ == "__main__":

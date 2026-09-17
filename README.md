@@ -22,6 +22,8 @@
 
 ## 快速开始
 
+macOS / Linux：
+
 ```zsh
 git clone <本仓库地址>
 cd research-vault-ingest-workflow
@@ -36,6 +38,21 @@ export RESEARCH_VAULT_ROOT="$HOME/Documents/ResearchVault"
 export ZOTERO_DATA_DIR="$HOME/Zotero"
 python3 scripts/doctor.py --vault "$RESEARCH_VAULT_ROOT"
 ```
+
+Windows PowerShell：
+
+```powershell
+git clone <本仓库地址>
+Set-Location research-vault-ingest-workflow
+python -m pip install -r requirements.txt
+python scripts/bootstrap.py `
+  --vault "$HOME\Documents\ResearchVault" `
+  --install-skills --skill-mode copy
+python scripts/doctor.py --vault "$HOME\Documents\ResearchVault"
+```
+
+Windows 默认推荐 `--skill-mode copy`，不依赖目录符号链接权限。doctor 会在 Zotero 正在运行、
+数据库处于 WAL 模式时创建临时只读快照，并校验配置的 MinerU 命令确实可执行。
 
 如果 Vault 尚无 `AGENTS.md`，bootstrap 会从 `AGENTS.example.md` 创建；已有文件绝不默认覆盖。
 

@@ -36,7 +36,10 @@ def backup_path(dst: Path, backup_root: Path, relative: Path) -> None:
 
 def install_tree(src_root: Path, dst_root: Path, force: bool, backup_root: Path) -> tuple[int, int, int]:
     copied = skipped = unchanged = 0
-    for src in sorted(p for p in src_root.rglob("*") if p.is_file()):
+    for src in sorted(
+        p for p in src_root.rglob("*")
+        if p.is_file() and "__pycache__" not in p.parts and p.suffix not in {".pyc", ".pyo"}
+    ):
         rel = src.relative_to(src_root)
         dst = dst_root / rel
         if same_file(src, dst):

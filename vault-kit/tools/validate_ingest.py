@@ -63,10 +63,17 @@ def index_targets(idx_text):
     """Link targets inside 01knowledge/index.md, normalized so 'x/y' and 'x/y.md' compare equal."""
     out = set()
     for t, _ in wikilinks(idx_text):
-        t = t.strip().lstrip("/")
+        t = slash_path(t.strip()).lstrip("/")
         out.add(t)
         out.add(t + ".md" if not t.endswith(".md") else t[:-3])
     return out
+
+def slash_path(path):
+    """Use vault-style separators for links and persisted relative paths."""
+    return str(path).replace("\\", "/")
+
+def vault_rel(path, base=ROOT):
+    return slash_path(os.path.relpath(path, base))
 
 MD_FILES = []
 for dirpath, dirnames, filenames in os.walk(ROOT):
@@ -77,12 +84,14 @@ for dirpath, dirnames, filenames in os.walk(ROOT):
 
 def resolve_link(target):
     """Resolve an Obsidian-style link target to a real file in the vault."""
-    t = target.strip().lstrip("/")
-    cands = [t, t + ".md", os.path.join(ROOT, t), os.path.join(ROOT, t + ".md")]
-    for c in cands:
+    t = slash_path(target.strip()).lstrip("/")
+    variants = [t] if t.endswith(".md") else [t, t + ".md"]
+    for rel in variants:
+        c = os.path.join(ROOT, *rel.split("/"))
         if os.path.isfile(c):
             return c
-    tails = [c for c in MD_FILES if c.endswith("/" + t) or c.endswith("/" + t + ".md")]
+    tails = [c for c in MD_FILES
+             if any(slash_path(c).endswith("/" + rel) for rel in variants)]
     return tails[0] if len(tails) >= 1 else None
 
 def wikilinks(text):
@@ -241,10 +250,10 @@ def validate_knowledge():
     check("knowledge.pages_discovered", len(pages) >= 1, "%d page(s)" % len(pages))
     idx = read(os.path.join(KNOW, "index.md"))
     linked = index_targets(idx)
-    allside = sorted(glob.glob(os.path.join(KNOW, ".meta/claims/*.json"))) + \
-              sorted(glob.glob(os.path.join(KNOW, ".meta/gaps/*.json")))
+    allside = sorted(glob.glob(os.path.join(KNOW, ".meta", "claims", "*.json"))) + \
+              sorted(glob.glob(os.path.join(KNOW, ".meta", "gaps", "*.json")))
     for p, fm in pages:
-        rel = os.path.relpath(p, ROOT)
+        rel = vault_rel(p)
         text = read(p)
         body = fm_of(text)[1]
         slug = None
@@ -294,9 +303,10 @@ def validate_knowledge():
         # claims 1:1
         heads = [m.group(1).strip() for m in re.finditer(r"^### (.+)$", body, flags=re.M) if m.group(1).startswith("结论")]
         sidecars = []
-        for sp in sorted(glob.glob(os.path.join(KNOW, ".meta/claims/*.json"))):
+        for sp in sorted(glob.glob(os.path.join(KNOW, ".meta", "claims", "*.json"))):
             d = json.load(open(sp, encoding="utf-8"))
-            if os.path.relpath(p, ROOT).endswith(d.get("page", "").split("/", 1)[-1]) or d.get("page") == rel:
+            page = slash_path(d.get("page", ""))
+            if rel.endswith(page.split("/", 1)[-1]) or page == rel:
                 sidecars.append((sp, d))
         ids = [d["claim_id"] for _, d in sidecars]
         check("kp.claims.ids_format." + rel, all(re.match(r"^claim-[a-z0-9-]+-\d{3}$", i) for i in ids), ";".join(ids[:3]))
@@ -321,9 +331,9 @@ def validate_knowledge():
                   "conditions", "mechanism", "limitations", "evidence", "last_updated"}, ";".join(det))
         # gaps
         gs = []
-        for gp in sorted(glob.glob(os.path.join(KNOW, ".meta/gaps/*.json"))):
+        for gp in sorted(glob.glob(os.path.join(KNOW, ".meta", "gaps", "*.json"))):
             d = json.load(open(gp, encoding="utf-8"))
-            if d.get("page") == rel:
+            if slash_path(d.get("page", "")) == rel:
                 gs.append((gp, d))
         check("kp.gaps.present." + rel, len(gs) > 0, "%d gap sidecars" % len(gs))
         for gp, d in gs:
@@ -337,14 +347,14 @@ def validate_knowledge():
         numbered = len(re.findall(r"^\d+\. ", gapsec, flags=re.M))
         check("kp.gaps.count_matches_page." + rel, numbered == len(gs), "page=%d sidecars=%d" % (numbered, len(gs)))
         # index navigation
-        short = os.path.relpath(p, KNOW)
+        short = vault_rel(p, KNOW)
         check("kp.indexed." + rel, bool({rel, short} & linked) or rel in idx,
               "not linked from 01knowledge/index.md")
     # .meta is never a knowledge page
-    check("meta.not_knowledge_pages", all(".meta" not in os.path.relpath(p, ROOT) for p, _ in pages))
+    check("meta.not_knowledge_pages", all(".meta" not in vault_rel(p) for p, _ in pages))
     # orphan pages
-    orphans = [os.path.relpath(p, ROOT) for p, fm in pages
-               if not ({os.path.relpath(p, ROOT), os.path.relpath(p, KNOW)} & linked)]
+    orphans = [vault_rel(p) for p, fm in pages
+               if not ({vault_rel(p), vault_rel(p, KNOW)} & linked)]
     check("knowledge.no_orphans", not orphans, ";".join(orphans))
     return pages
 

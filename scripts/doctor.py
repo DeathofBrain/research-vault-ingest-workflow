@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import sqlite3
 import sys
+import tempfile
 
 SKILL_NAMES = [
     "research-vault-ingest-orchestrator",
@@ -21,6 +22,38 @@ SKILL_NAMES = [
     "research-vault-literature-retrieval",
     "zotero-collection-manager",
 ]
+
+
+def zotero_tables(db: Path) -> set[str]:
+    """Read a live Zotero database without asking SQLite to create WAL side files."""
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:
+        with tempfile.TemporaryDirectory(prefix="zotero-doctor-ro-") as tmp:
+            snapshot = Path(tmp) / "zotero.sqlite"
+            shutil.copy2(db, snapshot)
+            for suffix in ("-wal", "-shm"):
+                source = Path(str(db) + suffix)
+                if source.exists():
+                    shutil.copy2(source, Path(str(snapshot) + suffix))
+            conn = sqlite3.connect(f"file:{snapshot}?mode=ro", uri=True)
+            try:
+                return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            finally:
+                conn.close()
+
+
+def executable(command: str | None) -> str | None:
+    if not command:
+        return None
+    path = Path(command).expanduser()
+    if path.is_file():
+        return str(path.resolve())
+    return shutil.which(command)
 
 
 def main() -> int:
@@ -60,17 +93,16 @@ def main() -> int:
     add("zotero.storage", storage.is_dir(), "warning", str(storage))
     if db.is_file():
         try:
-            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            conn.close()
+            tables = zotero_tables(db)
             add("zotero.schema", {"items", "itemAttachments"}.issubset(tables), "error", "items + itemAttachments")
-        except sqlite3.Error as exc:
+        except (OSError, sqlite3.Error) as exc:
             add("zotero.schema", False, "error", str(exc))
 
-    mineru = os.environ.get("MINERU_BIN") or shutil.which("mineru")
+    mineru = executable(os.environ.get("MINERU_BIN")) or shutil.which("mineru")
     if not mineru and os.environ.get("CONDA_PREFIX"):
-        candidate = Path(os.environ["CONDA_PREFIX"]) / "bin" / "mineru"
-        mineru = str(candidate) if candidate.exists() else None
+        suffix = "Scripts/mineru.exe" if os.name == "nt" else "bin/mineru"
+        candidate = Path(os.environ["CONDA_PREFIX"]) / suffix
+        mineru = str(candidate) if candidate.is_file() else None
     add("mineru.binary", bool(mineru), "warning", mineru or "set MINERU_BIN or activate its environment")
 
     for module in ["yaml", "pypdf"]:
