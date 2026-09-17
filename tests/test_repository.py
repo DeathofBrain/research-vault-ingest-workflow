@@ -15,6 +15,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RepositoryTests(unittest.TestCase):
+    @staticmethod
+    def load_module(name: str, path: Path):
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+
     def test_skills_have_valid_frontmatter(self):
         for skill in sorted((ROOT / "skills").iterdir()):
             if not skill.is_dir():
@@ -88,6 +96,51 @@ class RepositoryTests(unittest.TestCase):
             result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_mineru_command_supports_v4_and_legacy_cli(self):
+        module = self.load_module(
+            "portable_mineru_runner",
+            ROOT / "vault-kit" / "tools" / "run_mineru_production.py",
+        )
+        mineru_kit = "C:/tools/mineru-kit.exe"
+        self.assertEqual(module.select_mineru_cli(mineru_kit), "kit")
+        self.assertEqual(
+            module.build_mineru_command(mineru_kit, "input.pdf", "output", "pipeline", "basic"),
+            [
+                mineru_kit,
+                "parse",
+                "input.pdf",
+                "-o",
+                "output",
+                "-p",
+                "all",
+                "-f",
+                "markdown",
+                "--tier",
+                "basic",
+                "--ocr-mode",
+                "auto",
+            ],
+        )
+        self.assertEqual(
+            module.build_mineru_command("mineru", "input.pdf", "output", "pipeline", "basic"),
+            ["mineru", "-p", "input.pdf", "-o", "output", "-b", "pipeline", "-m", "auto"],
+        )
+
+    def test_mineru_runner_status_output_is_gbk_safe(self):
+        script = ROOT / "vault-kit" / "tools" / "run_mineru_production.py"
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "gbk"
+        result = subprocess.run(
+            [sys.executable, str(script), "missing.pdf", "output", "--mineru-bin", sys.executable],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            encoding="gbk",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("[ERROR]", result.stderr)
+
     def test_validator_resolves_vault_links_cross_platform(self):
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp)
@@ -98,10 +151,7 @@ class RepositoryTests(unittest.TestCase):
             os.environ["RESEARCH_VAULT_ROOT"] = str(vault)
             try:
                 script = ROOT / "vault-kit" / "tools" / "validate_ingest.py"
-                spec = importlib.util.spec_from_file_location("portable_validator", script)
-                module = importlib.util.module_from_spec(spec)
-                assert spec.loader is not None
-                spec.loader.exec_module(module)
+                module = self.load_module("portable_validator", script)
                 self.assertEqual(Path(module.resolve_link("论文库/Example")), note)
                 self.assertEqual(module.vault_rel(note), "02vault/论文库/Example.md")
             finally:

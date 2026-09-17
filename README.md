@@ -66,10 +66,14 @@ Windows 默认推荐 `--skill-mode copy`，不依赖目录符号链接权限。d
 | `ZOTERO_STORAGE` | `$ZOTERO_DATA_DIR/storage` | Zotero 附件根目录 |
 | `MINERU_BIN` | `PATH` / `CONDA_PREFIX` 自动查找 | MinerU 可执行文件 |
 | `MINERU_BACKEND` | `pipeline` | MinerU 后端 |
+| `MINERU_TIER` | 按 backend 映射（`pipeline` → `basic`） | MinerU 4 解析档位 |
 | `CODEX_HOME` | `~/.codex` | Codex skills 安装目录 |
 | `RESEARCH_VAULT_AUDIT_EXCEPTIONS` | `<vault>/config/audit_exceptions.json` | 无文本层页等审计例外 |
 
 可复制 `config/research-vault.env.example` 到自己的 shell 配置。不要把本机绝对路径、token 或 API key 提交到仓库。
+
+MinerU 4 推荐将 `MINERU_BIN` 指向 `mineru-kit`（Windows 为 `mineru-kit.exe`）；运行器会使用
+`mineru-kit parse`。旧版 `mineru` 命令仍受支持，因此现有 macOS 配置不需要迁移。
 
 ## 单篇入库
 
